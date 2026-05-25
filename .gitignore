@@ -1,0 +1,29 @@
+# Python virtual environment
+.venv/
+venv/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+*.log
+
+# Node/React/Next.js dependencies and builds
+node_modules/
+.next/
+dist/
+build/
+out/
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE/OS files
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+# Model weights
+backend/yolov8n.pt
