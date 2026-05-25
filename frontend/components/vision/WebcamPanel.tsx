@@ -167,15 +167,12 @@ export default function WebcamPanel() {
       const scaledW = rawW * scaleX;
       const scaledH = rawH * scaleY;
 
-      const name = face.name || "Unknown";
-      const state = face.engagement?.state || "Focused";
-      const score = face.engagement?.score || 88;
+      const name = face.name || "Student";
+      const status = face.status || "Focused";
 
-      let color = "#22c55e"; // green
-      if (state === "Neutral") {
-        color = "#f59e0b"; // yellow
-      } else if (state === "Distracted") {
-        color = "#ef4444"; // red
+      let color = "#00ff88"; // green for Focused
+      if (status === "Distracted") {
+        color = "#ffcc00"; // yellow for Distracted
       }
 
       // Draw high-tech bounding box (semi-transparent border, sharp corners)
@@ -224,7 +221,7 @@ export default function WebcamPanel() {
       ctx.stroke();
 
       // Modern Tag Label (floating slightly above target box)
-      const labelText = `${name} (${score}%)`;
+      const labelText = `${name} (${status})`;
       ctx.font = "bold 11px Inter, sans-serif";
       const textWidth = ctx.measureText(labelText).width;
 

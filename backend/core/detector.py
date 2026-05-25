@@ -1,5 +1,6 @@
 import logging
 from typing import List, Dict, Any
+import cv2
 import numpy as np
 import insightface
 
@@ -13,11 +14,14 @@ app = insightface.app.FaceAnalysis(
 
 # Prepare the detection model.
 # ctx_id=-1 forces CPU execution mode for maximum compatibility on Mac.
-# det_size=(640, 640) stabilizes detection input resolution for consistent box aspect ratios.
+# det_size=(960, 960) balances long-range classroom detection with acceptable CPU load.
 app.prepare(
     ctx_id=-1,
-    det_size=(640, 640)
+    det_size=(960, 960)
 )
+
+# Upscale factor for boosting tiny distant classroom faces
+UPSCALE_FACTOR = 2.0
 
 def calculate_iou(box1: List[int], box2: List[int]) -> float:
     """
@@ -90,16 +94,19 @@ def detect_faces(frame: np.ndarray) -> List[Dict[str, Any]]:
     """
     Detect faces in a BGR frame using a professional InsightFace pipeline.
     
+    Internally upscales the frame by 2x (INTER_CUBIC) to boost tiny distant
+    classroom faces, then scales coordinates back down to original frame space.
+    
     Filters out:
-    - Faces smaller than 80x80 pixels.
-    - Detections with confidence score below 0.65.
+    - Faces smaller than 12x12 pixels (allows distant backbench students).
+    - Detections with confidence score below 0.45.
     - Duplicate overlapping bounding boxes using IoU suppression (threshold > 0.4).
     
     Args:
         frame: A NumPy ndarray of the frame (BGR format).
         
     Returns:
-        A JSON-safe list of detected faces:
+        A JSON-safe list of detected faces (coordinates in original frame space):
         [
           {
             "bbox": [x, y, w, h],
@@ -111,9 +118,18 @@ def detect_faces(frame: np.ndarray) -> List[Dict[str, Any]]:
         logger.warning("Empty or invalid frame received for face detection.")
         return []
 
+    # 2x upscale to boost tiny distant faces before detection
+    upscaled = cv2.resize(
+        frame,
+        None,
+        fx=UPSCALE_FACTOR,
+        fy=UPSCALE_FACTOR,
+        interpolation=cv2.INTER_CUBIC
+    )
+
     try:
-        # Run face detection
-        results = app.get(frame)
+        # Run face detection on upscaled frame
+        results = app.get(upscaled)
     except Exception as e:
         logger.error(f"InsightFace detection error: {e}", exc_info=True)
         return []
@@ -122,29 +138,35 @@ def detect_faces(frame: np.ndarray) -> List[Dict[str, Any]]:
     faces: List[Dict[str, Any]] = []
 
     for face in results:
-        # face.bbox is typically a float array [x1, y1, x2, y2]
+        # face.bbox is a float array [x1, y1, x2, y2] in upscaled space
         x1, y1, x2, y2 = face.bbox
-        
-        # Ensure values are rounded, integer, and strictly clamped within frame boundaries
-        x1_int = max(0, min(frame_w, int(round(x1))))
-        y1_int = max(0, min(frame_h, int(round(y1))))
-        x2_int = max(0, min(frame_w, int(round(x2))))
-        y2_int = max(0, min(frame_h, int(round(y2))))
 
-        w = x2_int - x1_int
-        h = y2_int - y1_int
+        # Scale coordinates back DOWN to original frame space
+        x1 = int(x1 / UPSCALE_FACTOR)
+        y1 = int(y1 / UPSCALE_FACTOR)
+        x2 = int(x2 / UPSCALE_FACTOR)
+        y2 = int(y2 / UPSCALE_FACTOR)
 
-        # Face filtering rules: ignore faces smaller than 45x45
-        if w < 45 or h < 45:
+        # Clamp within original frame boundaries
+        x1 = max(0, min(frame_w, x1))
+        y1 = max(0, min(frame_h, y1))
+        x2 = max(0, min(frame_w, x2))
+        y2 = max(0, min(frame_h, y2))
+
+        w = x2 - x1
+        h = y2 - y1
+
+        # Tiny distant face support: allow faces as small as 12x12
+        if w < 12 or h < 12:
             continue
 
-        # Face filtering rules: ignore confidence below 0.65
+        # Balanced confidence for distant/partial faces
         confidence = float(face.det_score)
-        if confidence < 0.65:
+        if confidence < 0.45:
             continue
 
         faces.append({
-            "bbox": [x1_int, y1_int, w, h],
+            "bbox": [x1, y1, w, h],
             "confidence": round(confidence, 2)
         })
 

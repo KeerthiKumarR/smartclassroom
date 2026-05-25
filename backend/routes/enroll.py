@@ -1,7 +1,6 @@
 from fastapi import APIRouter
 from core.utils      import decode_base64_image
-from core.face_store import enroll_face, _app, KNOWN_FACES, _save_to_disk
-import numpy as np
+from core.face_store import enroll_face, KNOWN_FACES, _save_to_disk
 
 router = APIRouter()
 
@@ -20,30 +19,14 @@ def enroll_face_endpoint(payload: dict):
     if frame is None:
         return {"success": False, "message": "Camera frame missing."}
 
-    # Let InsightFace detect the face in the full frame
-    faces = _app.get(frame)
-    if not faces:
-        return {
-            "success": False,
-            "message": "No face detected. Please position yourself clearly and try again."
-        }
-
-    # Pick the largest face (most likely the person being enrolled)
-    best_face = max(faces, key=lambda f: (f.bbox[2]-f.bbox[0]) * (f.bbox[3]-f.bbox[1]))
-
-    # Crop it out
-    x1, y1, x2, y2 = [int(v) for v in best_face.bbox]
-    h_img, w_img = frame.shape[:2]
-    x1, y1 = max(0, x1), max(0, y1)
-    x2, y2 = min(w_img, x2), min(h_img, y2)
-    face_crop = frame[y1:y2, x1:x2]
-
     label = f"{student_name} ({roll_number})"
-    ok = enroll_face(label, face_crop)
+
+    # Pass the FULL frame — enroll_face detects the largest face and extracts embedding internally
+    ok = enroll_face(label, frame)
 
     if ok:
         return {"success": True, "message": f"{student_name} enrolled successfully."}
-    return {"success": False, "message": "Could not extract face embedding. Try again with better lighting."}
+    return {"success": False, "message": "No face detected. Please position yourself clearly and try again."}
 
 
 @router.get("/students")

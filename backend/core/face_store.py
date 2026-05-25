@@ -11,8 +11,8 @@ import numpy as np
 import insightface
 from insightface.app import FaceAnalysis
 
-_app = FaceAnalysis(name="buffalo_sc", providers=["CPUExecutionProvider"])
-_app.prepare(ctx_id=0, det_size=(640, 640))
+_app = FaceAnalysis(name="buffalo_l", providers=["CPUExecutionProvider"])
+_app.prepare(ctx_id=-1, det_size=(640, 640))
 
 # ─────────────────────────────────────────────
 # PERSISTENCE
@@ -59,44 +59,40 @@ _load_from_disk()
 
 
 # ─────────────────────────────────────────────
-# EMBEDDING HELPER
+# ENROLL (accepts FULL FRAME, not a crop)
 # ─────────────────────────────────────────────
 
-def _get_embedding(face_img: np.ndarray) -> np.ndarray | None:
-    """Run ArcFace on a BGR face crop and return 512-d unit embedding."""
-    if face_img is None or face_img.size == 0:
-        return None
+def enroll_face(name: str, frame: np.ndarray) -> bool:
+    """
+    Detect the largest face in the full frame and extract its embedding directly.
+    DO NOT pass a pre-cropped face image — InsightFace needs the full frame
+    to run detection + alignment + embedding extraction correctly.
+    """
+    if frame is None or frame.size == 0:
+        return False
 
-    # InsightFace needs at least ~80x80 to work reliably
-    h, w = face_img.shape[:2]
-    if h < 40 or w < 40:
-        return None
-
-    # Upscale small crops so ArcFace has enough pixels
-    if h < 112 or w < 112:
-        face_img = cv2.resize(face_img, (112, 112))
-
-    faces = _app.get(face_img)
+    faces = _app.get(frame)
     if not faces:
-        return None
+        return False
 
-    emb = faces[0].embedding
-    emb = emb / (np.linalg.norm(emb) + 1e-6)
-    return emb.astype(np.float32)
+    # Pick the largest face by bounding box area
+    largest_face = max(
+        faces,
+        key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1])
+    )
 
-
-# ─────────────────────────────────────────────
-# ENROLL
-# ─────────────────────────────────────────────
-
-def enroll_face(name: str, face_img: np.ndarray) -> bool:
-    emb = _get_embedding(face_img)
+    # Extract embedding directly from the face object (InsightFace provides this)
+    emb = largest_face.embedding
     if emb is None:
         return False
 
+    # Normalize to unit vector for cosine similarity
+    emb = emb / (np.linalg.norm(emb) + 1e-6)
+    emb = emb.astype(np.float32)
+
+    # Check if student already exists — update with running average
     for person in KNOWN_FACES:
         if person["name"].lower() == name.lower():
-            # Running average then re-normalise
             avg = (person["embedding"] + emb) / 2.0
             person["embedding"] = avg / (np.linalg.norm(avg) + 1e-6)
             _save_to_disk()
@@ -110,20 +106,35 @@ def enroll_face(name: str, face_img: np.ndarray) -> bool:
 
 
 # ─────────────────────────────────────────────
-# RECOGNIZE
+# RECOGNIZE (accepts FULL FRAME, not a crop)
 # ─────────────────────────────────────────────
 
 # ArcFace cosine similarity — 0.40 is a solid threshold
 RECOGNITION_THRESHOLD = 0.40
 
 
-def recognize_face(face_img: np.ndarray) -> tuple[str, float]:
+def recognize_face(frame: np.ndarray) -> tuple[str, float]:
+    """Recognize a face from a full frame against enrolled embeddings."""
     if not KNOWN_FACES:
         return "Unknown", 0.0
 
-    emb = _get_embedding(face_img)
+    if frame is None or frame.size == 0:
+        return "Unknown", 0.0
+
+    faces = _app.get(frame)
+    if not faces:
+        return "Unknown", 0.0
+
+    largest_face = max(
+        faces,
+        key=lambda f: (f.bbox[2] - f.bbox[0]) * (f.bbox[3] - f.bbox[1])
+    )
+
+    emb = largest_face.embedding
     if emb is None:
         return "Unknown", 0.0
+
+    emb = emb / (np.linalg.norm(emb) + 1e-6)
 
     best_score = -1.0
     best_name  = "Unknown"
@@ -135,12 +146,7 @@ def recognize_face(face_img: np.ndarray) -> tuple[str, float]:
         if person["embedding"] is None:
             continue
 
-        score = float(
-            np.dot(
-                emb,
-                person["embedding"]
-            )
-        )
+        score = float(np.dot(emb, person["embedding"]))
         if score > best_score:
             best_score = score
             best_name  = person["name"]

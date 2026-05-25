@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 import cv2
+import math
 from core.utils       import decode_base64_image
 from core.detector    import detect_faces
 from core.database    import latest_stats
@@ -9,6 +10,9 @@ router = APIRouter()
 # Global cache for heavy AI inference frame skipping
 last_faces = []
 frame_count = 0
+
+# Lightweight post-processing movement memory (read-only analysis layer)
+movement_memory = {}
 
 
 @router.post("/analyze-frame")
@@ -36,10 +40,10 @@ async def analyze_frame(payload: dict):
         else:
             small_frame = frame
 
-        # Run face detection on the downscaled frame
+        # Run face detection (detector handles 2x upscaling internally)
         raw_detections = detect_faces(small_frame)
 
-        # Scale coordinates back up to original frame dimensions
+        # Scale coordinates from 640x360 up to original frame dimensions
         scale_x = original_w / small_w
         scale_y = original_h / small_h
 
@@ -69,36 +73,96 @@ async def analyze_frame(payload: dict):
     # 2. Reuse cached face detections
     faces = last_faces
 
-    # 3. Synchronize stats to keep frontend stats card alive
+    # ─────────────────────────────────────────
+    # 3. POST-PROCESSING ONLY: lightweight drift status analysis
+    #    This section is READ-ONLY. It does NOT modify bbox coordinates.
+    # ─────────────────────────────────────────
+    for i, face in enumerate(faces):
+
+        x, y, w, h = face["bbox"]
+
+        center_x = x + w // 2
+        center_y = y + h // 2
+
+        student_id = f"student_{i}"
+
+        if student_id not in movement_memory:
+            movement_memory[student_id] = {
+                "prev_x": center_x,
+                "prev_y": center_y,
+                "drift_score": 0
+            }
+
+        prev_x = movement_memory[student_id]["prev_x"]
+        prev_y = movement_memory[student_id]["prev_y"]
+
+        distance = math.sqrt(
+            (center_x - prev_x) ** 2 +
+            (center_y - prev_y) ** 2
+        )
+
+        drift_score = movement_memory[student_id]["drift_score"]
+
+        # Excessive movement
+        if distance > 80:
+            drift_score += 1
+        else:
+            drift_score = max(0, drift_score - 1)
+
+        # Clamp
+        drift_score = min(drift_score, 10)
+
+        movement_memory[student_id]["prev_x"] = center_x
+        movement_memory[student_id]["prev_y"] = center_y
+        movement_memory[student_id]["drift_score"] = drift_score
+
+        # Assign status
+        if drift_score >= 5:
+            status = "Distracted"
+        else:
+            status = "Focused"
+
+        face["status"] = status
+
+    # 4. Synchronize stats to keep frontend stats card alive
     faces_count = len(faces)
+    distracted_count = sum(1 for f in faces if f.get("status") == "Distracted")
+    focused_count = faces_count - distracted_count
+
+    avg_engagement = 100
+    if faces_count > 0:
+        total_score = sum(45 if f.get("status") == "Distracted" else 92 for f in faces)
+        avg_engagement = int(total_score / faces_count)
+
     latest_stats.update({
         "facesDetected":    faces_count,
-        "focusedCount":     faces_count,  # placeholder
-        "distractedCount":  0,
+        "focusedCount":     focused_count,
+        "distractedCount":  distracted_count,
         "attendanceCount":  0,
-        "averageEngagement": 100,
+        "averageEngagement": avg_engagement,
     })
 
     stats = {
         "facesDetected":    faces_count,
-        "focusedCount":     faces_count,
-        "distractedCount":  0,
+        "focusedCount":     focused_count,
+        "distractedCount":  distracted_count,
         "attendanceCount":  0,
-        "averageEngagement": 100,
+        "averageEngagement": avg_engagement,
         "attendance":        0,
-        "engagement":        100,
-        "distracted":        0
+        "engagement":        avg_engagement,
+        "distracted":        distracted_count
     }
 
-    # Return only lightweight JSON faces and stats payloads (OpenCV rendering removed)
+    # Return only lightweight JSON faces and stats payloads
     return {
         "faces": [
             {
                 "bbox": det["bbox"],
                 "confidence": det["confidence"],
-                "name": "Face",
-                "focused": True,
-                "attendance": "Absent"
+                "name": "Student",
+                "focused": det.get("status", "Focused") == "Focused",
+                "attendance": "Absent",
+                "status": det.get("status", "Focused")
             }
             for det in faces
         ],
