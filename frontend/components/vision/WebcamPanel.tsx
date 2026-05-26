@@ -29,9 +29,7 @@ export default function WebcamPanel() {
     { time: "20s", focus: 85 },
   ]);
 
-  const [alerts, setAlerts] = useState<AlertItem[]>([
-    { id: "1", name: "Rahul", message: "Flagged: Slightly distracted", time: "Just now", type: "warning" },
-  ]);
+  const [alerts, setAlerts] = useState([]);
 
   const [stats, setStats] = useState({
     facesDetected: 0,
@@ -318,6 +316,29 @@ if (status === "Drifting") {
 
       const activeFaces = data.faces || [];
       setFaces(activeFaces);
+
+      const driftingFaces = activeFaces.filter(
+  (f: any) =>
+    f.status === "Drifting"
+);
+
+const liveAlerts = driftingFaces.map(
+  (f: any, index: number) => ({
+
+    id: `${f.name}-${index}`,
+
+    name: f.name || "Unknown",
+
+    message:
+      `${f.name} is drifting attention.`,
+
+    time: "Just now",
+
+    type: "danger",
+  })
+);
+
+setAlerts(liveAlerts);
 
       if (data.stats) {
         const averageEngagement = data.stats.averageEngagement || 0;

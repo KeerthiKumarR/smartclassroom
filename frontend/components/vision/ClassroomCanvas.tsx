@@ -25,7 +25,13 @@ export default function ClassroomCanvas({ faces, videoWidth, videoHeight }: Clas
       const [x, y, w, h] = face.bbox;
 
       // Draw bounding box
-      ctx.strokeStyle = face.engagement.state === "Focused" ? "#10B981" : face.engagement.state === "Neutral" ? "#F59E0B" : "#EF4444";
+      const status = (face as { status?: string }).status || "Focused";
+      ctx.strokeStyle =
+        status === "Focused"
+          ? "#10B981"
+          : status === "Neutral"
+          ? "#F59E0B"
+          : "#EF4444";
       ctx.lineWidth = 3;
       ctx.strokeRect(x, y, w, h);
 
