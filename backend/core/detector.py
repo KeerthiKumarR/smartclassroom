@@ -165,10 +165,18 @@ def detect_faces(frame: np.ndarray) -> List[Dict[str, Any]]:
         if confidence < 0.45:
             continue
 
+        # Get face embedding and keypoints
+        embedding = face.embedding.tolist() if face.embedding is not None else None
+        kps = (face.kps / UPSCALE_FACTOR).tolist() if face.kps is not None else None
+
         faces.append({
             "bbox": [x1, y1, w, h],
-            "confidence": round(confidence, 2)
+            "confidence": round(confidence, 2),
+            "embedding": embedding,
+            "kps": kps
         })
+
+
 
     # Apply Non-Maximum Suppression to remove overlapping duplicate boxes
     cleaned_faces = remove_duplicates(faces)

@@ -162,13 +162,20 @@ export default function WebcamPanel() {
       const [rawX, rawY, rawW, rawH] = bbox;
 
       // Scale all coordinates consistently to display canvas dimensions
-      const scaledX = rawX * scaleX;
-      const scaledY = rawY * scaleY;
-      const scaledW = rawW * scaleX;
-      const scaledH = rawH * scaleY;
+      // Mirror X coordinate manually because video is mirrored
+const scaledW = rawW * scaleX;
+const scaledH = rawH * scaleY;
+
+// Correct mirrored overlay alignment
+const scaledX =
+  canvas.width -
+  ((rawX + rawW) * scaleX);
+
+const scaledY = rawY * scaleY;
 
       const name = face.name || "Student";
       const status = face.status || "Focused";
+      const isRecognized = face.attendance === "Present" || (name !== "Unknown" && name !== "Student");
 
       let color = "#00ff88"; // green for Focused
       if (status === "Distracted") {
@@ -186,6 +193,27 @@ export default function WebcamPanel() {
 
       // Main box outline
       ctx.strokeRect(scaledX, scaledY, scaledW, scaledH);
+
+      // Draw high-tech Present badge in the top-right corner of the bounding box when recognized
+      if (isRecognized) {
+        const badgeText = "PRESENT";
+        ctx.font = "bold 9px Inter, sans-serif";
+        const badgeTextWidth = ctx.measureText(badgeText).width;
+
+        const badgeH = 16;
+        const badgeW = badgeTextWidth + 12;
+        const badgeX = scaledX + scaledW - badgeW - 6;
+        const badgeY = scaledY + 6;
+
+        ctx.fillStyle = "rgba(34, 197, 94, 0.95)"; // bright neon green badge background
+        ctx.beginPath();
+        ctx.roundRect(badgeX, badgeY, badgeW, badgeH, 4);
+        ctx.fill();
+
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText(badgeText, badgeX + 6, badgeY + 11);
+      }
+
 
       // Accent Corner Brackets for a futuristic look
       const bracketLength = Math.min(15, scaledW * 0.25);
@@ -393,7 +421,6 @@ export default function WebcamPanel() {
                 <canvas
                   ref={canvasRef}
                   className="absolute top-0 left-0 w-full h-full pointer-events-none"
-                  style={{ transform: "scaleX(-1)" }} // Keep the overlays mirrored visually with the video!
                 />
                 {/* Visual overlay scanner bar */}
                 <div className="scanner-line" />

@@ -1,39 +1,38 @@
-def calculate_engagement(bbox, frame_shape, confidence=0.9):
-    """
-    Heuristic engagement based on face size relative to frame and detection confidence.
-    High confidence face = looking at camera = Focused.
-    Low confidence face = looking away/distracted.
-    """
-    x, y, bw, bh = bbox
-    frame_h, frame_w = frame_shape[:2]
+def detect_focus(face):
+    try:
+        # InsightFace keypoints
+        left_eye = face.kps[0]
+        right_eye = face.kps[1]
+        nose = face.kps[2]
 
-    # Face area ratio
-    face_area_ratio = (bw * bh) / (frame_w * frame_h)
+        # Eye center
+        eye_center_x = (
+            left_eye[0] + right_eye[0]
+        ) / 2
 
-    # In a classroom setting at 720p, faces are usually between 30x30 and 100x100.
-    # So we scale the threshold significantly down.
-    # Also, we factor in face detection confidence.
-    base_score = int(65 + (confidence * 30)) # range 65 to 95 based on confidence
-    
-    # Tiny deterministic variation based on bbox coordinates to make the UI feel live and active
-    variation = int((x + y + bw + bh) % 7) - 3 # -3 to +3
-    score = base_score + variation
+        eye_center_y = (
+            left_eye[1] + right_eye[1]
+        ) / 2
 
-    # If the face is extremely small and towards the margins, we flag them as slightly distracted
-    if face_area_ratio < 0.0015 and (x < frame_w * 0.15 or x > frame_w * 0.85):
-        score -= 15
+        # Horizontal head turn
+        nose_offset = abs(
+            nose[0] - eye_center_x
+        )
 
-    # Bound the score
-    score = max(40, min(99, score))
+        # Vertical head tilt
+        vertical_offset = (
+            nose[1] - eye_center_y
+        )
 
-    if score >= 75:
-        state = "Focused"
-    elif score >= 60:
-        state = "Neutral"
-    else:
-        state = "Distracted"
+        # Looking sideways
+        if nose_offset > 20:
+            return "Distracted"
 
-    return {
-        "state": state,
-        "score": score
-    }
+        # Looking downward
+        if vertical_offset > 35:
+            return "Distracted"
+
+        return "Focused"
+
+    except Exception:
+        return "Focused"

@@ -1,6 +1,37 @@
 [
   {
-    "student": "keerthi kumar (1RM25CI026)",
+    "name": "Keerthi",
+    "roll_number": "1",
+    "date": "2026-05-26",
+    "time": "10:42:11",
+    "status": "Present"
+  },
+  {
+    "name": "pawan",
+    "roll_number": "2",
+    "date": "2026-05-26",
+    "time": "04:52:05",
+    "status": "Present"
+  },
+  {
+    "name": "chirayu",
+    "roll_number": "3",
+    "date": "2026-05-26",
+    "time": "05:13:57",
+    "status": "Present"
+  },
+  {
+    "name": "ritik",
+    "roll_number": "4",
+    "date": "2026-05-26",
+    "time": "05:17:17",
+    "status": "Present"
+  },
+  {
+    "name": "pravin",
+    "roll_number": "5",
+    "date": "2026-05-26",
+    "time": "05:22:40",
     "status": "Present"
   }
 ]

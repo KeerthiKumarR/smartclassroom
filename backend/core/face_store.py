@@ -51,11 +51,46 @@ def _save_to_disk():
         students = [{"name": p["name"]} for p in KNOWN_FACES]
         with open(STUDENTS_PATH, "w") as f:
             json.dump(students, f, indent=2)
+
+        # Sync to backend/data/students.json for recognition.py
+        data_students_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)),
+            "data", "students.json"
+        )
+        os.makedirs(os.path.dirname(data_students_path), exist_ok=True)
+
+        data_students = []
+        for person in KNOWN_FACES:
+            label = person["name"]
+            name = label
+            roll = "N/A"
+            if "(" in label and label.endswith(")"):
+                try:
+                    parts = label.split("(")
+                    name = parts[0].strip()
+                    roll = parts[1].replace(")", "").strip()
+                except:
+                    pass
+            
+            emb = person["embedding"]
+            emb_list = emb.tolist() if isinstance(emb, np.ndarray) else list(emb)
+            data_students.append({
+                "name": name,
+                "roll_number": roll,
+                "embedding": emb_list
+            })
+
+        with open(data_students_path, "w") as f:
+            json.dump(data_students, f, indent=2)
+        print(f"[face_store] Synced {len(data_students)} student(s) to backend/data/students.json")
     except Exception as e:
         print(f"[face_store] Save failed: {e}")
 
 
 _load_from_disk()
+# Instantly sync to backend/data/students.json on startup
+_save_to_disk()
+
 
 
 # ─────────────────────────────────────────────
