@@ -178,9 +178,10 @@ const scaledY = rawY * scaleY;
       const isRecognized = face.attendance === "Present" || (name !== "Unknown" && name !== "Student");
 
       let color = "#00ff88"; // green for Focused
-      if (status === "Distracted") {
-        color = "#ffcc00"; // yellow for Distracted
-      }
+
+if (status === "Drifting") {
+  color = "#ff4444"; // red for Drifting
+}
 
       // Draw high-tech bounding box (semi-transparent border, sharp corners)
       ctx.strokeStyle = color;

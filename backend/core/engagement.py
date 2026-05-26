@@ -1,6 +1,7 @@
 def detect_focus(face):
+
     try:
-        # InsightFace keypoints
+
         left_eye = face.kps[0]
         right_eye = face.kps[1]
         nose = face.kps[2]
@@ -14,23 +15,23 @@ def detect_focus(face):
             left_eye[1] + right_eye[1]
         ) / 2
 
-        # Horizontal head turn
-        nose_offset = abs(
+        # Sideways head movement
+        horizontal_offset = abs(
             nose[0] - eye_center_x
         )
 
-        # Vertical head tilt
+        # Looking downward
         vertical_offset = (
             nose[1] - eye_center_y
         )
 
-        # Looking sideways
-        if nose_offset > 20:
-            return "Distracted"
+        # Sideways looking
+        if horizontal_offset > 20:
+            return "Drifting"
 
         # Looking downward
         if vertical_offset > 35:
-            return "Distracted"
+            return "Drifting"
 
         return "Focused"
 
